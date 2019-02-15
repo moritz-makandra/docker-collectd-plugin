@@ -163,6 +163,14 @@ class MemoryStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
         mem_stats = stats['memory_stats']
+        values = [mem_stats['limit'], mem_stats['max_usage'],
+                  mem_stats['usage']]
+        cls.emit(container, 'memory.usage', values, t=t)
+
+        for key, value in (mem_stats.get('stats') or {}).items():
+            cls.emit(container, 'memory.stats', [value],
+                     type_instance=key, t=t)
+
         mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
         mem_percent = 100.0 * mem_usage_no_cache / mem_stats['limit']
         mem_free = mem_stats['limit'] - mem_usage_no_cache
@@ -286,7 +294,9 @@ class DockerPlugin:
                 self.timeout = int(node.values[0])
 
     def init_callback(self):
-        self.client = docker.APIClient(base_url=self.docker_url)
+        self.client = docker.APIClient(
+            base_url=self.docker_url,
+            version=DockerPlugin.MIN_DOCKER_API_VERSION)
         self.client.timeout = self.timeout
 
         # Check API version for stats endpoint support.
