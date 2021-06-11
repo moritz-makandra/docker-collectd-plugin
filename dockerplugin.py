@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 # -*- encoding: utf-8 -*-
 #
 # Collectd plugin for collecting docker container stats
