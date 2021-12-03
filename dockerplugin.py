@@ -41,7 +41,7 @@ def _c(c):
     argument is a string, it is assumed to be the container's ID and only the
     first 7 digits will be returned. If it's a dictionary, the string returned
     is <7-digit ID>/<name>."""
-    if type(c) == str or type(c) == unicode:
+    if type(c) == str:
         return c[:7]
     return '{id}/{name}'.format(id=c['Id'][:7], name=c['Name'])
 
@@ -51,7 +51,9 @@ class Stats:
     def emit(cls, container, type, value, t=None, type_instance=None):
         val = collectd.Values()
         val.plugin = 'docker'
-        val.plugin_instance = container['Name']
+        # val.plugin_instance = container['Name']
+        # act like virt plugin: set the host value to the container id
+        val.host = container['Name']
 
         if type:
             val.type = type
@@ -71,6 +73,8 @@ class Stats:
 
         val.values = value
         val.dispatch()
+        # collectd.info('emitted data {},{},{}: {}.'
+        #               .format(val.plugin_instance, type, type_instance, value))
 
     @classmethod
     def read(cls, container, stats, t):
@@ -96,12 +100,12 @@ class BlkioStats(Stats):
 
             for type_instance, values in device_stats.items():
                 if len(values) == 5:
-                    cls.emit(container, 'blkio', values,
+                    cls.emit(container, 'docker_blkio', values,
                              type_instance=type_instance, t=t)
                 elif len(values) == 1:
                     # For some reason, some fields contains only one value and
                     # the 'op' field is empty. Need to investigate this
-                    cls.emit(container, 'blkio.single', values,
+                    cls.emit(container, 'docker_blkio.single', values,
                              type_instance=key, t=t)
                 else:
                     collectd.warning(('Unexpected number of blkio stats for '
@@ -116,17 +120,17 @@ class CpuStats(Stats):
         cpu_usage = cpu_stats['cpu_usage']
 
         percpu = cpu_usage['percpu_usage']
-        for cpu, value in enumerate(percpu):
-            cls.emit(container, 'cpu.percpu.usage', [value],
-                     type_instance='cpu%d' % (cpu,), t=t)
+        # for cpu, value in enumerate(percpu):
+        #     cls.emit(container, 'cpu.percpu.usage', [value],
+        #              type_instance='cpu%d' % (cpu,), t=t)
 
-        items = sorted(cpu_stats['throttling_data'].items())
-        cls.emit(container, 'cpu.throttling_data', [x[1] for x in items], t=t)
+        # items = sorted(cpu_stats['throttling_data'].items())
+        # cls.emit(container, 'cpu.throttling_data', [x[1] for x in items], t=t)
 
         system_cpu_usage = cpu_stats['system_cpu_usage']
-        values = [cpu_usage['total_usage'], cpu_usage['usage_in_kernelmode'],
-                  cpu_usage['usage_in_usermode'], system_cpu_usage]
-        cls.emit(container, 'cpu.usage', values, t=t)
+        # values = [cpu_usage['total_usage'], cpu_usage['usage_in_kernelmode'],
+        #           cpu_usage['usage_in_usermode'], system_cpu_usage]
+        # cls.emit(container, 'cpu.usage', values, t=t)
 
         # CPU Percentage based on calculateCPUPercent Docker method
         # https://github.com/docker/docker/blob/master/api/client/stats.go
@@ -135,34 +139,36 @@ class CpuStats(Stats):
             precpu_stats = stats['precpu_stats']
             precpu_usage = precpu_stats['cpu_usage']
             cpu_delta = cpu_usage['total_usage'] - precpu_usage['total_usage']
-            system_delta = system_cpu_usage - precpu_stats['system_cpu_usage']
+            precpu_system_cpu_usage = precpu_stats.get('system_cpu_usage')
+            if precpu_system_cpu_usage is None:
+                precpu_system_cpu_usage = 0
+                collectd.warning('precpu_system_cpu_usage not found in {container}'.format(container=_c(container)))
+            system_delta = system_cpu_usage - precpu_system_cpu_usage
             if system_delta > 0 and cpu_delta > 0:
-                cpu_percent = 100.0 * cpu_delta / system_delta * len(percpu)
-        cls.emit(container, "cpu.percent", ["%.2f" % (cpu_percent)], t=t)
+                # cpu_percent = 100.0 * cpu_delta / system_delta * len(percpu)
+                # we calculate with 100% as maximum
+                cpu_percent = 100.0 * cpu_delta / system_delta
+        cls.emit(container, "docker_cpu", ["%.2f" % (cpu_percent)], t=t)
 
 
 class NetworkStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
-        items = sorted(stats['network'].items())
-        cls.emit(container, 'network.usage', [x[1] for x in items], t=t)
+        for iface in stats['networks']:
+            data = [x[1] for x in sorted(stats['networks'][iface].items())]
+            cls.emit(container, 'docker_network', data, type_instance=iface, t=t)
 
 
 class MemoryStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
         mem_stats = stats['memory_stats']
-        values = [mem_stats['limit'], mem_stats['max_usage'],
-                  mem_stats['usage']]
-        cls.emit(container, 'memory.usage', values, t=t)
-
-        for key, value in (mem_stats.get('stats') or {}).items():
-            cls.emit(container, 'memory.stats', [value],
-                     type_instance=key, t=t)
-        
         mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
         mem_percent = 100.0 * mem_usage_no_cache / mem_stats['limit']
-        cls.emit(container, 'memory.percent', ["%.2f" % mem_percent], t=t)
+        mem_free = mem_stats['limit'] - mem_usage_no_cache
+
+        values = [mem_stats['limit'], mem_usage_no_cache, mem_free, mem_percent]
+        cls.emit(container, 'docker_memory', values, t=t)
 
 
 class ContainerStats(threading.Thread):
@@ -206,17 +212,17 @@ class ContainerStats(threading.Thread):
         while not self.stop:
             try:
 
-                if not self._stream:
+                if self._stream:
                     if not self._feed:
                         self._feed = self._client.stats(self._container,
                                                         decode=True)
-                    self._stats = self._feed.next()
+                    self._stats = next(self._feed)
                 else:
                     self._stats = self._client.stats(self._container,
                                                      decode=True, stream=False)
                 # Reset failure count on successfull read from the stats API.
                 failures = 0
-            except Exception, e:
+            except Exception as e:
                 collectd.warning('Error reading stats from {container}: {msg}'
                                  .format(container=_c(self._container), msg=e))
 
@@ -280,9 +286,7 @@ class DockerPlugin:
                 self.timeout = int(node.values[0])
 
     def init_callback(self):
-        self.client = docker.Client(
-            base_url=self.docker_url,
-            version=DockerPlugin.MIN_DOCKER_API_VERSION)
+        self.client = docker.APIClient(base_url=self.docker_url)
         self.client.timeout = self.timeout
 
         # Check API version for stats endpoint support.
@@ -323,6 +327,10 @@ class DockerPlugin:
                     if not re.match("/.*/", name):
                         container['Name'] = name[1:]
 
+                # if openstack container: extract the id only. the origin format is: 'zun-<id>'
+                if container['Name'].startswith("zun-"):
+                    container['Name'] = container['Name'][4:]
+
                 # Start a stats gathering thread if the container is new.
                 if container['Id'] not in self.stats:
                     self.stats[container['Id']] = ContainerStats(container,
@@ -334,7 +342,7 @@ class DockerPlugin:
                 t = stats['read']
                 for klass in self.CLASSES:
                     klass.read(container, stats, t)
-            except Exception, e:
+            except Exception as e:
                 collectd.warning(('Error getting stats for container '
                                   '{container}: {msg}')
                                  .format(container=_c(container), msg=e))
@@ -344,26 +352,25 @@ class DockerPlugin:
 if __name__ == '__main__':
     class ExecCollectdValues:
         def dispatch(self):
-            if not getattr(self, 'host', None):
-                self.host = os.environ.get('COLLECTD_HOSTNAME', 'localhost')
+            # act like virt plugin: set the host value to the container id
+            # self.host = self.plugin_instance
             identifier = '%s/%s' % (self.host, self.plugin)
             if getattr(self, 'plugin_instance', None):
                 identifier += '-' + self.plugin_instance
             identifier += '/' + self.type
             if getattr(self, 'type_instance', None):
                 identifier += '-' + self.type_instance
-            print 'PUTVAL', identifier, \
-                  ':'.join(map(str, [int(self.time)] + self.values))
+            print('PUTVAL', identifier, ':'.join(map(str, [int(self.time)] + self.values)))
 
     class ExecCollectd:
         def Values(self):
             return ExecCollectdValues()
 
         def warning(self, msg):
-            print 'WARNING:', msg
+            print('WARNING:', msg)
 
         def info(self, msg):
-            print 'INFO:', msg
+            print('INFO:', msg)
 
         def register_read(self, docker_plugin):
             pass
