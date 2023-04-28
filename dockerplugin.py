@@ -119,10 +119,18 @@ class CpuStats(Stats):
         cpu_stats = stats['cpu_stats']
         cpu_usage = cpu_stats['cpu_usage']
 
-        percpu = cpu_usage['percpu_usage']
-        # for cpu, value in enumerate(percpu):
-        #     cls.emit(container, 'cpu.percpu.usage', [value],
-        #              type_instance='cpu%d' % (cpu,), t=t)
+        if 'percpu_usage' not in cpu_usage:
+            collectd.debug('percpu_usage not found assuming docker is running rootless')
+            return
+
+        for cpu, value in enumerate(cpu_usage['percpu_usage']):
+            cls.emit(
+                container,
+                'cpu.percpu.usage',
+                [value],
+                type_instance='cpu%d' % (cpu,),
+                t=t
+            )
 
         # items = sorted(cpu_stats['throttling_data'].items())
         # cls.emit(container, 'cpu.throttling_data', [x[1] for x in items], t=t)
