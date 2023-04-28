@@ -159,9 +159,13 @@ class CpuStats(Stats):
 class NetworkStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
-        for iface in stats['networks']:
-            data = [x[1] for x in sorted(stats['networks'][iface].items())]
-            cls.emit(container, 'docker_network', data, type_instance=iface, t=t)
+        if 'networks' in stats:
+            for iface in stats['networks']:
+                data = [x[1] for x in sorted(stats['networks'][iface].items())]
+                cls.emit(container, 'docker_network', data, type_instance=iface, t=t)
+        else:
+                data = [x[1] for x in sorted(stats['network'].items())]
+                cls.emit(container, 'docker_network', data, type_instance='network', t=t)
 
 
 class MemoryStats(Stats):
