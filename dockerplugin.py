@@ -176,7 +176,11 @@ class MemoryStats(Stats):
             cls.emit(container, 'memory.stats', [value],
                      type_instance=key, t=t)
 
-        mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
+        if mem_stats['stats']['cache']:
+            mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
+        else:
+            mem_usage_no_cache = mem_stats['usage']
+
         mem_percent = 100.0 * mem_usage_no_cache / mem_stats['limit']
         mem_free = mem_stats['limit'] - mem_usage_no_cache
 
