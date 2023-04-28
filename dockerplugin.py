@@ -89,13 +89,14 @@ class BlkioStats(Stats):
             # numbers). We need to group and report the stats of each block
             # device independently.
             device_stats = {}
-            for value in values:
-                k = '{key}-{major}-{minor}'.format(key=key,
-                                                   major=value['major'],
-                                                   minor=value['minor'])
-                if k not in device_stats:
-                    device_stats[k] = []
-                device_stats[k].append(value['value'])
+            if values:
+                for value in values:
+                    k = '{key}-{major}-{minor}'.format(key=key,
+                                                       major=value['major'],
+                                                       minor=value['minor'])
+                    if k not in device_stats:
+                        device_stats[k] = []
+                    device_stats[k].append(value['value'])
 
             for type_instance, values in device_stats.items():
                 if len(values) == 5:
