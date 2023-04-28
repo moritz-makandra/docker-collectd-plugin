@@ -84,8 +84,7 @@ class Stats:
 class BlkioStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
-        blkio_stats = stats['blkio_stats']
-        for key, values in blkio_stats.items():
+        for key, values in stats['blkio_stats'].items():
             # Block IO stats are reported by block device (with major/minor
             # numbers). We need to group and report the stats of each block
             # device independently.
