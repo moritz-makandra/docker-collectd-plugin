@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 #
 # Collectd plugin for collecting docker container stats
@@ -50,10 +50,19 @@ class Stats:
     @classmethod
     def emit(cls, container, type, value, t=None, type_instance=None):
         val = collectd.Values()
+
+        val.host = os.environ.get('COLLECTD_HOSTNAME')
+        pod_name = os.environ.get('COLLECTD_POD_NAME')
+
         val.plugin = 'docker'
-        # val.plugin_instance = container['Name']
-        # act like virt plugin: set the host value to the container id
-        val.host = container['Name']
+
+        if pod_name:
+            val.plugin_instance = '{pod_name}-{container_name}'.format(
+                container_name = container['Name'],
+                pod_name = pod_name
+            )
+        else:
+            val.plugin_instance = container['Name']
 
         if type:
             val.type = type
@@ -286,7 +295,7 @@ class DockerPlugin:
     DEFAULT_DOCKER_TIMEOUT = 5
 
     # The stats endpoint is only supported by API >= 1.17
-    MIN_DOCKER_API_VERSION = '1.17'
+    MIN_DOCKER_API_VERSION = '1.21'
 
     CLASSES = [NetworkStats, BlkioStats, CpuStats, MemoryStats]
 
@@ -310,7 +319,7 @@ class DockerPlugin:
                 self.timeout = int(node.values[0])
 
     def init_callback(self):
-        self.client = docker.Client(
+        self.client = docker.APIClient(
             base_url=self.docker_url,
             version=DockerPlugin.MIN_DOCKER_API_VERSION)
         self.client.timeout = self.timeout
