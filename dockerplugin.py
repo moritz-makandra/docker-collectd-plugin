@@ -346,33 +346,36 @@ class DockerPlugin:
             del self.stats[cid]
 
         for container in containers:
-            try:
-                for name in container['Names']:
-                    # Containers can be linked and the container name is not
-                    # necessarly the first entry of the list
-                    if not re.match("/.*/", name):
-                        container['Name'] = name[1:]
+            for name in container['Names']:
+                # Containers can be linked and the container name is not
+                # necessarly the first entry of the list
+                if not re.match("/.*/", name):
+                    container['Name'] = name[1:]
 
-                # if openstack container: extract the id only. the origin format is: 'zun-<id>'
-                if container['Name'].startswith("zun-"):
-                    container['Name'] = container['Name'][4:]
+            # if openstack container: extract the id only. the origin format is: 'zun-<id>'
+            if container['Name'].startswith("zun-"):
+                container['Name'] = container['Name'][4:]
 
-                # Start a stats gathering thread if the container is new.
-                if container['Id'] not in self.stats:
-                    self.stats[container['Id']] = ContainerStats(container,
-                                                                 self.client,
-                                                                 self.stream)
+            # Start a stats gathering thread if the container is new.
+            if container['Id'] not in self.stats:
+                self.stats[container['Id']] = ContainerStats(container,
+                                                             self.client,
+                                                             self.stream)
 
-                # Get and process stats from the container.
-                stats = self.stats[container['Id']].stats
-                t = stats['read']
-                for klass in self.CLASSES:
+            # Get and process stats from the container.
+            stats = self.stats[container['Id']].stats
+            t = stats['read']
+            for klass in self.CLASSES:
+                try:
                     klass.read(container, stats, t)
-            except Exception as e:
-                collectd.warning(('Error getting stats for container '
-                                  '{container}: {msg}')
-                                 .format(container=_c(container), msg=e))
-
+                except Exception as e:
+                    collectd.warning(
+                        (
+                            'Error parsing stats' '{klass}: {container} {msg}'
+                        ).format(
+                            klass=klass.__name__, container=_c(container), msg=e
+                        )
+                    )
 
 # Command-line execution
 if __name__ == '__main__':
