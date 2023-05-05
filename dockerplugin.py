@@ -61,7 +61,7 @@ class Stats:
             val.type_instance = type_instance
 
         if t:
-            val.time = calendar.timegm(dateutil.parser.parse(t).utctimetuple())
+            val.time = calendar.timegm(dateutil.parser.parse(t, ignoretz=True).utctimetuple())
         else:
             val.time = time.time()
 
