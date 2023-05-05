@@ -184,13 +184,14 @@ class MemoryStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
         mem_stats = stats['memory_stats']
-        values = [mem_stats['limit'],
-                  mem_stats['usage']]
-        cls.emit(container, 'memory.usage', values, t=t)
 
-        for key, value in (mem_stats.get('stats') or {}).items():
-            cls.emit(container, 'memory.stats', [value],
-                     type_instance=key, t=t)
+        # values = [mem_stats['limit'],
+        #           mem_stats['usage']]
+        # cls.emit(container, 'memory.usage', [1,2], t=t)
+
+        # for key, value in (mem_stats.get('stats') or {}).items():
+        #     cls.emit(container, 'memory.stats', [value],
+        #              type_instance=key, t=t)
 
         if 'cache' in mem_stats['stats']:
             mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
