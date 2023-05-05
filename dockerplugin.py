@@ -320,9 +320,15 @@ class DockerPlugin:
                 self.timeout = int(node.values[0])
 
     def init_callback(self):
-        self.client = docker.APIClient(
-            base_url=self.docker_url,
-            version=DockerPlugin.MIN_DOCKER_API_VERSION)
+        if hasattr(docker, 'Client'):
+            self.client = docker.Client(
+                base_url=self.docker_url,
+                version=DockerPlugin.MIN_DOCKER_API_VERSION)
+        else:
+            self.client = docker.APIClient(
+                base_url=self.docker_url,
+                version=DockerPlugin.MIN_DOCKER_API_VERSION)
+
         self.client.timeout = self.timeout
 
         # Check API version for stats endpoint support.
