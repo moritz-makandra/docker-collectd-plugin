@@ -171,7 +171,7 @@ class MemoryStats(Stats):
     @classmethod
     def read(cls, container, stats, t):
         mem_stats = stats['memory_stats']
-        values = [mem_stats['limit'], mem_stats['max_usage'],
+        values = [mem_stats['limit'],
                   mem_stats['usage']]
         cls.emit(container, 'memory.usage', values, t=t)
 
@@ -179,7 +179,11 @@ class MemoryStats(Stats):
             cls.emit(container, 'memory.stats', [value],
                      type_instance=key, t=t)
 
-        mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
+        if 'cache' in mem_stats['stats']:
+            mem_usage_no_cache = mem_stats['usage'] - mem_stats['stats']['cache']
+        else:
+            mem_usage_no_cache = mem_stats['usage']
+
         mem_percent = 100.0 * mem_usage_no_cache / mem_stats['limit']
         mem_free = mem_stats['limit'] - mem_usage_no_cache
 
