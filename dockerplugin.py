@@ -24,7 +24,7 @@
 # Requirements: docker-py
 
 import dateutil.parser
-from distutils.version import StrictVersion
+from packaging import version
 import calendar
 import docker
 import os
@@ -333,9 +333,8 @@ class DockerPlugin:
 
         # Check API version for stats endpoint support.
         try:
-            version = self.client.version()['ApiVersion']
-            if StrictVersion(version) < \
-                    StrictVersion(DockerPlugin.MIN_DOCKER_API_VERSION):
+            api_version = self.client.version()['ApiVersion']
+            if version.parse(api_version) <= version.parse(self.MIN_DOCKER_API_VERSION):
                 raise Exception
         except:
             collectd.warning(('Docker daemon at {url} does not '
@@ -347,7 +346,7 @@ class DockerPlugin:
         collectd.info(('Collecting stats about Docker containers from {url} '
                        '(API version {version}; timeout: {timeout}s).')
                       .format(url=self.docker_url,
-                              version=version,
+                              version=api_version,
                               timeout=self.timeout))
         return True
 
